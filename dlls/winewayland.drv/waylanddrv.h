@@ -264,6 +264,8 @@ struct wayland_client_surface
     struct wl_subsurface *wl_subsurface;
     struct wp_viewport *wp_viewport;
     struct wp_color_management_surface_v1 *color_management;
+    int remote_fd;       /* connection to the owner of the window, for windows of other processes */
+    int remote_retry;
 };
 
 extern struct wayland_client_surface *impl_from_client_surface(struct client_surface *client);
@@ -493,6 +495,15 @@ void wayland_surface_set_decorations(struct wayland_surface *surface, BOOL serve
 LRESULT WAYLAND_NotifyIcon(HWND hwnd, UINT msg, NOTIFYICONDATAW *nid);
 void WAYLAND_CleanupIcons(HWND hwnd);
 NTSTATUS waylanddrv_unix_systray_run(void *arg);
+void wayland_remote_present_pixels(struct client_surface *client, UINT width, UINT height, UINT stride,
+                                   BOOL bgra, const void *pixels);
+void wayland_remote_destroy_surface(struct wayland_client_surface *surface);
+void wayland_remote_destroy_window(HWND hwnd);
+NTSTATUS waylanddrv_unix_remote_run(void *arg);
+struct wayland_buffer_queue;
+struct wayland_buffer_queue *wayland_buffer_queue_create(int width, int height, uint32_t format);
+void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue);
+struct wayland_shm_buffer *wayland_buffer_queue_get_free_buffer(struct wayland_buffer_queue *queue);
 void WAYLAND_SetWindowIcons(HWND hwnd, HICON icon, const ICONINFO *ii, HICON icon_small, const ICONINFO *ii_small);
 void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
 void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);

@@ -1380,6 +1380,7 @@ static void wayland_client_surface_destroy(struct client_surface *client)
 
     TRACE("%s\n", debugstr_client_surface(client));
 
+    if (client->remote) wayland_remote_destroy_surface(surface);
     if (surface->color_management)
         wp_color_management_surface_v1_destroy(surface->color_management);
     if (surface->wp_viewport)
@@ -1456,6 +1457,8 @@ static BOOL wayland_client_surface_set_color_space(struct client_surface *client
     struct wp_image_description_v1 *desc;
     struct wp_color_manager_v1 *manager;
 
+    if (client->remote) return FALSE;
+
     TRACE("%s color_space %#x\n", debugstr_client_surface(client), color_space);
 
     if (!(manager = process_wayland.wp_color_manager_v1)) return FALSE;
@@ -1497,6 +1500,7 @@ static const struct client_surface_funcs wayland_client_surface_funcs =
     .update = wayland_client_surface_update,
     .present = wayland_client_surface_present,
     .set_color_space = wayland_client_surface_set_color_space,
+    .present_pixels = wayland_remote_present_pixels,
 };
 
 struct wayland_client_surface *impl_from_client_surface(struct client_surface *client)
@@ -1511,6 +1515,20 @@ struct client_surface *WAYLAND_CreateClientSurface(HWND hwnd, int pixel_format, 
     struct wl_region *empty_region;
 
     if (!(client = client_surface_create(&wayland_client_surface_funcs, hwnd, pixel_format, raw))) return NULL;
+
+    /* A Wayland surface cannot be attached to the window of another process, whose frames
+     * are handed to the owner as pixels. */
+    {
+        DWORD pid = 0;
+
+        NtUserGetWindowThread(hwnd, &pid);
+        if (pid && pid != HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess))
+        {
+            client->client.remote = TRUE;
+            client->remote_fd = -1;
+            return &client->client;
+        }
+    }
 
     client->wl_surface =
         wl_compositor_create_surface(process_wayland.wl_compositor);

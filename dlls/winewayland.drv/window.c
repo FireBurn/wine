@@ -451,6 +451,8 @@ void WAYLAND_DestroyWindow(HWND hwnd)
 
     TRACE("%p\n", hwnd);
 
+    wayland_remote_destroy_window(hwnd);
+
     if (!(data = wayland_win_data_get(hwnd))) return;
     wayland_win_data_destroy(data);
 }

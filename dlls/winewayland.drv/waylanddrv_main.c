@@ -132,6 +132,7 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     waylanddrv_unix_read_events,
     waylanddrv_unix_init_clipboard,
     waylanddrv_unix_systray_run,
+    waylanddrv_unix_remote_run,
 };
 
 C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == waylanddrv_unix_func_count);
@@ -144,6 +145,7 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     waylanddrv_unix_read_events,
     waylanddrv_unix_init_clipboard,
     waylanddrv_unix_systray_run,
+    waylanddrv_unix_remote_run,
 };
 
 C_ASSERT(ARRAYSIZE(__wine_unix_call_wow64_funcs) == waylanddrv_unix_func_count);

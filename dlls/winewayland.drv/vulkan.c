@@ -47,6 +47,15 @@ static VkResult wayland_vulkan_surface_create(struct client_surface *client, con
 
     TRACE("%s %p %p\n", debugstr_client_surface(client), instance, handle);
 
+    /* Nothing is shown from here for a window of another process, its frames are read back */
+    if (client->remote)
+    {
+        VkHeadlessSurfaceCreateInfoEXT headless = {.sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT};
+
+        if (!instance->p_vkCreateHeadlessSurfaceEXT) return VK_ERROR_EXTENSION_NOT_PRESENT;
+        return instance->p_vkCreateHeadlessSurfaceEXT(instance->host.instance, &headless, NULL, handle);
+    }
+
     create_info_host.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
     create_info_host.pNext = NULL;
     create_info_host.flags = 0; /* reserved */
@@ -72,8 +81,13 @@ static VkBool32 wayland_get_physical_device_presentation_support(struct vulkan_p
 
 static void wayland_map_instance_extensions(struct vulkan_instance_extensions *extensions)
 {
+    static BOOL host_has_headless;
+
+    /* the first call is made with the extensions of the host */
+    if (extensions->has_VK_EXT_headless_surface) host_has_headless = TRUE;
     if (extensions->has_VK_KHR_win32_surface) extensions->has_VK_KHR_wayland_surface = 1;
     if (extensions->has_VK_KHR_wayland_surface) extensions->has_VK_KHR_win32_surface = 1;
+    if (extensions->has_VK_KHR_win32_surface && host_has_headless) extensions->has_VK_EXT_headless_surface = 1;
 }
 
 static void wayland_map_device_extensions(struct vulkan_device_extensions *extensions)

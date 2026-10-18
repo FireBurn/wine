@@ -69,7 +69,7 @@ static const struct wl_buffer_listener buffer_listener = { buffer_release };
  *
  * Destroys a buffer queue and any contained buffers.
  */
-static void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue)
+void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue)
 {
     struct wayland_shm_buffer *shm_buffer, *next;
 
@@ -103,8 +103,7 @@ static void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue)
  *
  * Creates a buffer queue containing buffers with the specified width and height.
  */
-static struct wayland_buffer_queue *wayland_buffer_queue_create(int width, int height,
-                                                                uint32_t format)
+struct wayland_buffer_queue *wayland_buffer_queue_create(int width, int height, uint32_t format)
 {
     struct wayland_buffer_queue *queue;
 
@@ -132,7 +131,7 @@ err:
  * Gets a free buffer from the buffer queue. If no free buffers
  * are available this function blocks until it can provide one.
  */
-static struct wayland_shm_buffer *wayland_buffer_queue_get_free_buffer(struct wayland_buffer_queue *queue)
+struct wayland_shm_buffer *wayland_buffer_queue_get_free_buffer(struct wayland_buffer_queue *queue)
 {
     struct wayland_shm_buffer *shm_buffer;
 

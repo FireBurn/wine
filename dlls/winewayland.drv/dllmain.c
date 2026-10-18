@@ -99,6 +99,12 @@ static DWORD WINAPI systray_thread(void *arg)
     return 0;
 }
 
+static DWORD WINAPI remote_thread(void *arg)
+{
+    WAYLANDDRV_UNIX_CALL(remote_run, NULL);
+    return 0;
+}
+
 static BOOL is_explorer_process(void)
 {
     WCHAR path[MAX_PATH], *name;
@@ -125,6 +131,9 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
     /* Handle clipboard events in a dedicated thread, if needed. */
     if (!WAYLANDDRV_UNIX_CALL(init_clipboard, NULL))
         CloseHandle(CreateThread(NULL, 0, clipboard_thread, NULL, 0, &tid));
+
+    /* Take the frames that other processes render for the windows of this one. */
+    CloseHandle(CreateThread(NULL, 0, remote_thread, NULL, 0, &tid));
 
     /* The system tray lives in explorer, which needs a thread to answer the desktop's requests. */
     if (is_explorer_process())
