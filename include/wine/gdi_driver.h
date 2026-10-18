@@ -260,6 +260,9 @@ struct client_surface_funcs
     void (*present)( struct client_surface *surface, HDC hdc );
     /* try to set the client surface color space directly for vulkan pass-through */
     BOOL (*set_color_space)( struct client_surface *surface, VkColorSpaceKHR color_space );
+    /* take the pixels of a presented frame, for surfaces of windows that belong to another process */
+    void (*present_pixels)( struct client_surface *surface, UINT width, UINT height, UINT stride,
+                            BOOL bgra, const void *pixels );
 };
 
 struct client_surface
@@ -275,6 +278,7 @@ struct client_surface
     RECT                               virtual_rect;   /* virtual size and position in the toplevel ancestor, relative to its visible rect */
     RECT                               monitor_rect;   /* raw physical size and position in the toplevel ancestor, relative to its visible rect */
     BOOL                               raw;            /* use the raw physical position and size for the host client surface */
+    BOOL                               remote;         /* the window belongs to another process, frames are sent to it as pixels */
 };
 
 W32KAPI void *client_surface_create( const struct client_surface_funcs *funcs, HWND hwnd, int format, BOOL raw );
