@@ -93,6 +93,21 @@ static DWORD WINAPI clipboard_thread(void *arg)
     return 0;
 }
 
+static DWORD WINAPI systray_thread(void *arg)
+{
+    WAYLANDDRV_UNIX_CALL(systray_run, NULL);
+    return 0;
+}
+
+static BOOL is_explorer_process(void)
+{
+    WCHAR path[MAX_PATH], *name;
+
+    if (!GetModuleFileNameW(NULL, path, ARRAY_SIZE(path))) return FALSE;
+    name = wcsrchr(path, '\\');
+    return !lstrcmpiW(name ? name + 1 : path, L"explorer.exe");
+}
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
 {
     DWORD tid;
@@ -110,6 +125,10 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
     /* Handle clipboard events in a dedicated thread, if needed. */
     if (!WAYLANDDRV_UNIX_CALL(init_clipboard, NULL))
         CloseHandle(CreateThread(NULL, 0, clipboard_thread, NULL, 0, &tid));
+
+    /* The system tray lives in explorer, which needs a thread to answer the desktop's requests. */
+    if (is_explorer_process())
+        CloseHandle(CreateThread(NULL, 0, systray_thread, NULL, 0, &tid));
 
     return TRUE;
 }

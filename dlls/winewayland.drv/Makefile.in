@@ -1,6 +1,6 @@
 MODULE = winewayland.drv
 UNIXLIB = winewayland.so
-UNIX_CFLAGS = $(EGL_CFLAGS) $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_EGL_CFLAGS) $(XKBCOMMON_CFLAGS) $(XKBREGISTRY_CFLAGS)
+UNIX_CFLAGS = $(DBUS_CFLAGS) $(EGL_CFLAGS) $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_EGL_CFLAGS) $(XKBCOMMON_CFLAGS) $(XKBREGISTRY_CFLAGS)
 UNIX_LIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(WAYLAND_EGL_LIBS) $(XKBCOMMON_LIBS) $(XKBREGISTRY_LIBS) $(PTHREAD_LIBS) -lm
 IMPORTS = user32 win32u
 
@@ -17,6 +17,7 @@ SOURCES = \
 	pointer-constraints-unstable-v1.xml \
 	pointer-warp-v1.xml \
 	relative-pointer-unstable-v1.xml \
+	systray.c \
 	text-input-unstable-v3.xml \
 	viewporter.xml \
 	vulkan.c \
