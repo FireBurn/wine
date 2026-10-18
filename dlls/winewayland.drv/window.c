@@ -510,6 +510,17 @@ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UIN
     else if (wayland_win_data_create_wayland_surface(data, owner_surface))
     {
         wayland_win_data_update_wayland_state(data);
+
+        /* A frame drawn before the configure was processed is dropped, and a window that does
+         * not change is not drawn again. */
+        if (data->window_contents && data->wayland_surface &&
+            data->wayland_surface->processing.serial && data->wayland_surface->processing.processed &&
+            wayland_surface_reconfigure(data->wayland_surface))
+        {
+            wayland_surface_attach_shm(data->wayland_surface, data->window_contents, NULL);
+            wl_surface_damage_buffer(data->wayland_surface->wl_surface, 0, 0, INT32_MAX, INT32_MAX);
+            wl_surface_commit(data->wayland_surface->wl_surface);
+        }
     }
 
     if (owner_data) wayland_win_data_release(owner_data);
