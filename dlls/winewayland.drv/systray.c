@@ -603,6 +603,9 @@ static void notify_owner(HWND owner, UINT callback, UINT id, UINT version, UINT 
     NtUserMessageCall(owner, callback, wp, lp, 0, NtUserSendNotifyMessage, FALSE);
 }
 
+const WCHAR wayland_tray_click_propW[] =
+    {'_','_','w','i','n','e','w','a','y','l','a','n','d','_','t','r','a','y','_','c','l','i','c','k',0};
+
 /* The desktop reports positions in logical coordinates, Windows ones are in pixels. */
 static void logical_to_wine(int *x, int *y)
 {
@@ -654,6 +657,8 @@ static void click_icon(HWND owner, UINT callback, UINT id, UINT version, UINT do
                        UINT extra, int x, int y)
 {
     click_to_logical(&x, &y);
+    NtUserSetProp(NtUserGetDesktopWindow(), wayland_tray_click_propW,
+                  (HANDLE)tray_click_pack(NtGetTickCount(), x, y));
     logical_to_wine(&x, &y);
     NtUserSetCursorPos(x, y);
     notify_owner(owner, callback, id, version, down, x, y);

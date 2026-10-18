@@ -948,6 +948,65 @@ static void wayland_surface_reconfigure_subsurface(struct wayland_surface *surfa
 }
 
 /**********************************************************************
+ *          wayland_surface_place_popup
+ *
+ * Places the menu opened by a tray icon click above the icon, or below it for
+ * a panel at the top of the screen, centred on the icon and clear of the screen
+ * edges. Wayland has no work area that would keep it off the panel.
+ */
+static void wayland_surface_place_popup(struct wayland_surface *surface, RECT *rect)
+{
+    const int margin = 12; /* distance to the edges of the screen */
+    const int gap = 44; /* distance to the icon, enough to clear a panel */
+    const int panel_zone = 200; /* panels are within this distance of an edge */
+    int width = rect->right - rect->left, height = rect->bottom - rect->top;
+    struct wayland_output *output;
+    ULONG_PTR click;
+    int x, y;
+
+    /* tooltips are smaller than menus */
+    if (width < 100 || height < 100) return;
+    if (!(click = (ULONG_PTR)NtUserGetProp(NtUserGetDesktopWindow(), wayland_tray_click_propW))) return;
+
+    /* a menu window that is shown again for another click is placed again */
+    if (surface->popup_click == click)
+    {
+        OffsetRect(rect, surface->popup_x - rect->left, surface->popup_y - rect->top);
+        return;
+    }
+    if (NtGetTickCount() - tray_click_time(click) > TRAY_CLICK_MAX_AGE) return;
+    x = tray_click_x(click);
+    y = tray_click_y(click);
+
+    pthread_mutex_lock(&process_wayland.output_mutex);
+    wl_list_for_each(output, &process_wayland.output_list, link)
+    {
+        const struct wayland_output_state *state = &output->current;
+        int left = state->logical_x + margin, right = state->logical_x + state->logical_w - margin;
+        int top = state->logical_y + margin, bottom = state->logical_y + state->logical_h - margin;
+
+        if (!state->logical_w || !state->logical_h) continue;
+        if (x < state->logical_x || x >= state->logical_x + state->logical_w ||
+            y < state->logical_y || y >= state->logical_y + state->logical_h) continue;
+        if (y - state->logical_y > panel_zone && state->logical_y + state->logical_h - y > panel_zone) break;
+
+        rect->left = x - width / 2;
+        if (y > state->logical_y + state->logical_h / 2) rect->top = y - gap - height;
+        else rect->top = y + gap;
+        rect->left = max(left, min(rect->left, right - width));
+        rect->top = max(top, min(rect->top, bottom - height));
+        rect->right = rect->left + width;
+        rect->bottom = rect->top + height;
+        surface->popup_click = click;
+        surface->popup_x = rect->left;
+        surface->popup_y = rect->top;
+        TRACE("hwnd=%p click %d,%d placed the menu at %s\n", surface->hwnd, x, y, wine_dbgstr_rect(rect));
+        break;
+    }
+    pthread_mutex_unlock(&process_wayland.output_mutex);
+}
+
+/**********************************************************************
  *          wayland_surface_reconfigure
  *
  * Reconfigures the wayland surface as needed to match the latest requested
@@ -964,7 +1023,10 @@ BOOL wayland_surface_reconfigure(struct wayland_surface *surface)
           wine_dbgstr_rect(&surface->current.rect), surface->current.state);
 
     if (surface->plasma_surface)
+    {
+        wayland_surface_place_popup(surface, &rect);
         org_kde_plasma_surface_set_position(surface->plasma_surface, rect.left, rect.top);
+    }
 
     switch (surface->role)
     {

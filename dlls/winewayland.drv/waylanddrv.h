@@ -289,6 +289,8 @@ struct wayland_surface
     struct wp_viewport *wp_viewport;
     struct wp_fractional_scale_v1 *wp_fractional_scale_v1;
     struct org_kde_plasma_surface *plasma_surface;
+    ULONG_PTR popup_click;
+    int popup_x, popup_y;
     struct wayland_shm_buffer *small_icon_buffer;
     struct wayland_shm_buffer *big_icon_buffer;
 
@@ -350,6 +352,17 @@ void wayland_surface_attach_shm(struct wayland_surface *surface,
                                 struct wayland_shm_buffer *shm_buffer,
                                 HRGN surface_damage_region);
 BOOL wayland_surface_reconfigure(struct wayland_surface *surface);
+/* The last tray icon click, in logical coordinates and with its time, is kept as a property
+ * of the desktop window for the process that opens the menu it causes. */
+extern const WCHAR wayland_tray_click_propW[];
+#define TRAY_CLICK_MAX_AGE 10000 /* milliseconds */
+static inline ULONG_PTR tray_click_pack(ULONG time, int x, int y)
+{
+    return ((ULONG_PTR)time << 32) | ((x & 0xffff) << 16) | (y & 0xffff);
+}
+static inline ULONG tray_click_time(ULONG_PTR click) { return click >> 32; }
+static inline int tray_click_x(ULONG_PTR click) { return (click >> 16) & 0xffff; }
+static inline int tray_click_y(ULONG_PTR click) { return click & 0xffff; }
 BOOL wayland_surface_config_is_compatible(struct wayland_surface_config *conf, RECT rect,
                                           enum wayland_surface_config_state state);
 RECT map_rect_to_surface(struct wayland_surface *surface, RECT rect);
