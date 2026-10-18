@@ -621,6 +621,21 @@ void wayland_surface_attach_shm(struct wayland_surface *surface,
      * is partially or completely outside of the wl_buffe.
      * 0 is also an invalid width / height value so use 1x1 instead.
      */
+    /* The compositor maps the source onto the destination with the fractional scale. When the
+     * window size is not a multiple of it, a source of exactly the pixels the destination covers
+     * keeps that mapping one to one instead of stretching the contents by a fraction of a pixel. */
+    {
+        RECT dest = map_rect_to_surface(surface, surface->window.rect);
+        int src_width = round((dest.right - dest.left) * surface->window.scale);
+        int src_height = round((dest.bottom - dest.top) * surface->window.scale);
+
+        if (abs(src_width - win_width) <= 1 && abs(src_height - win_height) <= 1)
+        {
+            win_width = src_width;
+            win_height = src_height;
+        }
+    }
+
     win_width = max(1, min(win_width, shm_buffer->width));
     win_height = max(1, min(win_height, shm_buffer->height));
 
