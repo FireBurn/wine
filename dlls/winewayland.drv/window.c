@@ -51,6 +51,9 @@ static int wayland_win_data_cmp_rb(const void *key,
 static pthread_mutex_t win_data_mutex;
 static struct rb_tree win_data_rb = { wayland_win_data_cmp_rb };
 
+static BOOL is_window_managed(HWND hwnd, UINT swp_flags, BOOL fullscreen);
+static BOOL window_has_compositor_frame(BOOL managed, UINT style, UINT ex_style);
+
 /***********************************************************************
  *           wayland_win_data_create
  *
@@ -61,16 +64,22 @@ static struct wayland_win_data *wayland_win_data_create(HWND hwnd, const struct 
     struct wayland_win_data *data;
     struct rb_entry *rb_entry;
     HWND parent;
+    BOOL managed;
 
     /* Don't create win data for desktop or HWND_MESSAGE windows. */
     if (!(parent = NtUserGetAncestor(hwnd, GA_PARENT))) return NULL;
     if (parent != NtUserGetDesktopWindow() && !NtUserGetAncestor(parent, GA_PARENT))
         return NULL;
 
+    /* The frame depends on whether the window is managed, so this has to be known
+     * before its first position change, as win32u asks for the frame then. */
+    managed = is_window_managed(hwnd, SWP_NOACTIVATE, FALSE);
+
     if (!(data = calloc(1, sizeof(*data)))) return NULL;
 
     data->hwnd = hwnd;
     data->rects = *rects;
+    data->managed = managed;
 
     pthread_mutex_lock(&win_data_mutex);
 
@@ -300,6 +309,8 @@ static void wayland_win_data_update_wayland_state(struct wayland_win_data *data)
         break;
     case WAYLAND_SURFACE_ROLE_TOPLEVEL:
         if (!surface->xdg_surface) break; /* surface role has been cleared */
+        wayland_surface_set_decorations(surface, window_has_compositor_frame(data->managed,
+            NtUserGetWindowLongW(data->hwnd, GWL_STYLE), NtUserGetWindowLongW(data->hwnd, GWL_EXSTYLE)));
         wayland_surface_update_state_toplevel(surface);
         break;
     case WAYLAND_SURFACE_ROLE_SUBSURFACE:
@@ -399,6 +410,38 @@ static BOOL is_window_managed(HWND hwnd, UINT swp_flags, BOOL fullscreen)
     return FALSE;
 }
 
+/* Whether the compositor draws the frame of a window, in which case Wine leaves it out. */
+static BOOL window_has_compositor_frame(BOOL managed, UINT style, UINT ex_style)
+{
+    if (!process_wayland.zxdg_decoration_manager_v1 || !managed) return FALSE;
+    if (ex_style & WS_EX_TOOLWINDOW) return FALSE;
+    if ((ex_style & (WS_EX_LAYERED | WS_EX_COMPOSITED)) == WS_EX_LAYERED) return FALSE;
+    return (style & WS_CAPTION) == WS_CAPTION;
+}
+
+/***********************************************************************
+ *           WAYLAND_GetWindowStyleMasks
+ */
+BOOL WAYLAND_GetWindowStyleMasks(HWND hwnd, UINT style, UINT ex_style, UINT *style_mask, UINT *ex_style_mask)
+{
+    struct wayland_win_data *data;
+    BOOL managed = FALSE;
+
+    if ((data = wayland_win_data_get(hwnd)))
+    {
+        managed = data->managed;
+        wayland_win_data_release(data);
+    }
+
+    *style_mask = *ex_style_mask = 0;
+    if (window_has_compositor_frame(managed, style, ex_style))
+    {
+        *style_mask = WS_CAPTION | WS_DLGFRAME | WS_THICKFRAME;
+        *ex_style_mask = WS_EX_DLGMODALFRAME;
+    }
+    return TRUE;
+}
+
 /***********************************************************************
  *           WAYLAND_DestroyWindow
  */
@@ -437,7 +480,7 @@ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UIN
     HWND owner = NtUserGetAncestor(hwnd, GA_ROOT);
     struct wayland_surface *owner_surface;
     struct wayland_win_data *data, *owner_data;
-    BOOL managed, fullscreen = swp_flags & WINE_SWP_FULLSCREEN;
+    BOOL managed, frame_changed, fullscreen = swp_flags & WINE_SWP_FULLSCREEN;
 
     TRACE("hwnd %p new_rects %s after %p flags %08x\n", hwnd, debugstr_window_rects(new_rects), insert_after, swp_flags);
 
@@ -450,6 +493,7 @@ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UIN
     owner_data = owner && owner != hwnd ? wayland_win_data_get(owner) : NULL;
     owner_surface = owner_data ? owner_data->wayland_surface : NULL;
 
+    frame_changed = data->managed != managed;
     data->rects = *new_rects;
     data->is_fullscreen = fullscreen;
     data->resizeable = swp_flags & WINE_SWP_RESIZABLE;
@@ -470,6 +514,12 @@ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UIN
 
     if (owner_data) wayland_win_data_release(owner_data);
     wayland_win_data_release(data);
+
+    /* Whether the compositor draws the frame depends on the window being managed, so a window
+     * that became managed or unmanaged gets its frame computed again. */
+    if (frame_changed && window_has_compositor_frame(managed, NtUserGetWindowLongW(hwnd, GWL_STYLE),
+                                                      NtUserGetWindowLongW(hwnd, GWL_EXSTYLE)))
+        NtUserPostMessage(hwnd, WM_WAYLAND_FRAME_CHANGED, 0, 0);
 }
 
 static void wayland_configure_window(HWND hwnd)
@@ -625,6 +675,23 @@ static void wayland_configure_window(HWND hwnd)
         flags |= SWP_NOSENDCHANGING;
     }
 
+    /* The size from the compositor is that of the visible area, which leaves out the
+     * frame it draws. Wine's window includes that frame, sized for the style it will have. */
+    if (!(flags & SWP_NOSIZE))
+    {
+        UINT style_mask, ex_style_mask, ex_style = NtUserGetWindowLongW(hwnd, GWL_EXSTYLE);
+        RECT frame = {0};
+
+        style = NtUserGetWindowLongW(hwnd, GWL_STYLE);
+        WAYLAND_GetWindowStyleMasks(hwnd, style, ex_style, &style_mask, &ex_style_mask);
+        if (style_mask && NtUserAdjustWindowRect(&frame, style & style_mask, FALSE,
+                                                 ex_style & ex_style_mask, NtUserGetDpiForWindow(hwnd)))
+        {
+            rect.right += frame.right - frame.left;
+            rect.bottom += frame.bottom - frame.top;
+        }
+    }
+
     NtUserSetRawWindowPos(hwnd, rect, flags, FALSE);
 }
 
@@ -643,6 +710,10 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_WAYLAND_SET_FOREGROUND:
         NtUserSetForegroundWindowInternal(hwnd);
+        return 0;
+    case WM_WAYLAND_FRAME_CHANGED:
+        NtUserSetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                           SWP_NOACTIVATE | SWP_FRAMECHANGED);
         return 0;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, (long)wp, lp);
