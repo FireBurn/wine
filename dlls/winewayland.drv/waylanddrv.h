@@ -42,6 +42,7 @@
 #include "pointer-warp-v1-client-protocol.h"
 #include "alpha-modifier-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
+#include "plasma-shell-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
 
 #include "windef.h"
@@ -185,6 +186,7 @@ struct wayland
     struct zwlr_data_control_manager_v1 *zwlr_data_control_manager_v1;
     struct wl_data_device_manager *wl_data_device_manager;
     struct xdg_toplevel_icon_manager_v1 *xdg_toplevel_icon_manager_v1;
+    struct org_kde_plasma_shell *org_kde_plasma_shell;
     struct zxdg_decoration_manager_v1 *zxdg_decoration_manager_v1;
     struct wp_cursor_shape_manager_v1 *wp_cursor_shape_manager_v1;
     struct wp_pointer_warp_v1 *wp_pointer_warp_v1;
@@ -286,6 +288,7 @@ struct wayland_surface
     struct wl_surface *wl_surface;
     struct wp_viewport *wp_viewport;
     struct wp_fractional_scale_v1 *wp_fractional_scale_v1;
+    struct org_kde_plasma_surface *plasma_surface;
     struct wayland_shm_buffer *small_icon_buffer;
     struct wayland_shm_buffer *big_icon_buffer;
 

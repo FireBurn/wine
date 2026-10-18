@@ -476,6 +476,19 @@ void wayland_surface_make_toplevel(struct wayland_surface *surface)
 
     wayland_surface_init_fractional_scale(surface, 1.0);
 
+    /* Wayland has no global positions, so a menu or tooltip that does not belong to a
+     * window with a surface is placed through the compositor's shell interface. */
+    if (process_wayland.org_kde_plasma_shell &&
+        (NtUserGetWindowLongW(surface->hwnd, GWL_STYLE) & WS_POPUP) &&
+        (NtUserGetWindowLongW(surface->hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) &&
+        (surface->plasma_surface = org_kde_plasma_shell_get_surface(process_wayland.org_kde_plasma_shell,
+                                                                    surface->wl_surface)))
+    {
+        org_kde_plasma_surface_set_role(surface->plasma_surface, ORG_KDE_PLASMA_SURFACE_ROLE_APPLETPOPUP);
+        org_kde_plasma_surface_set_skip_taskbar(surface->plasma_surface, 1);
+        org_kde_plasma_surface_set_skip_switcher(surface->plasma_surface, 1);
+    }
+
     wl_surface_commit(surface->wl_surface);
     wl_display_flush(process_wayland.wl_display);
 
@@ -546,6 +559,12 @@ void wayland_surface_clear_role(struct wayland_surface *surface)
     {
         wp_fractional_scale_v1_destroy(surface->wp_fractional_scale_v1);
         surface->wp_fractional_scale_v1 = NULL;
+    }
+
+    if (surface->plasma_surface)
+    {
+        org_kde_plasma_surface_destroy(surface->plasma_surface);
+        surface->plasma_surface = NULL;
     }
 
     switch (surface->role)
@@ -943,6 +962,9 @@ BOOL wayland_surface_reconfigure(struct wayland_surface *surface)
           surface->hwnd, wine_dbgstr_rect(&rect), window->state,
           wine_dbgstr_rect(&surface->processing.rect), surface->processing.state,
           wine_dbgstr_rect(&surface->current.rect), surface->current.state);
+
+    if (surface->plasma_surface)
+        org_kde_plasma_surface_set_position(surface->plasma_surface, rect.left, rect.top);
 
     switch (surface->role)
     {
