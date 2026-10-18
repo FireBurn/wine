@@ -623,11 +623,37 @@ static void logical_to_wine(int *x, int *y)
     pthread_mutex_unlock(&process_wayland.output_mutex);
 }
 
+/* The desktop gives positions in logical coordinates or, from the panel, in pixels:
+ * a point outside the logical size of every output but inside its mode is in pixels. */
+static void click_to_logical(int *x, int *y)
+{
+    struct wayland_output *output;
+
+    pthread_mutex_lock(&process_wayland.output_mutex);
+    wl_list_for_each(output, &process_wayland.output_list, link)
+    {
+        const struct wayland_output_state *state = &output->current;
+
+        if (!state->current_mode || !state->logical_w || !state->logical_h) continue;
+        if (*x >= state->logical_x && *x < state->logical_x + state->logical_w &&
+            *y >= state->logical_y && *y < state->logical_y + state->logical_h) break;
+        if (*x >= state->logical_x && *x < state->logical_x + state->current_mode->width &&
+            *y >= state->logical_y && *y < state->logical_y + state->current_mode->height)
+        {
+            *x = state->logical_x + (*x - state->logical_x) * state->logical_w / state->current_mode->width;
+            *y = state->logical_y + (*y - state->logical_y) * state->logical_h / state->current_mode->height;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&process_wayland.output_mutex);
+}
+
 /* Deliver a click the way Windows does: the button messages, then the
  * version 4 messages when the application asked for them. */
 static void click_icon(HWND owner, UINT callback, UINT id, UINT version, UINT down, UINT up,
                        UINT extra, int x, int y)
 {
+    click_to_logical(&x, &y);
     logical_to_wine(&x, &y);
     NtUserSetCursorPos(x, y);
     notify_owner(owner, callback, id, version, down, x, y);
