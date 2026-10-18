@@ -439,8 +439,10 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface, 
         copy_from_window_region = shm_buffer->damage_region;
     }
 
+    /* The unused byte of an XRGB buffer is whatever GDI left there, usually zero,
+     * and some compositors take it as alpha and show the window black. */
     wayland_shm_buffer_copy_data(shm_buffer, color_bits, &surface_rect, copy_from_window_region,
-                                 shape_bits && !wws->layered);
+                                 buffer_format == WL_SHM_FORMAT_XRGB8888 || (shape_bits && !wws->layered));
     if (shape_bits) wayland_shm_buffer_copy_shape(shm_buffer, rect, shape_info, shape_bits);
 
     NtGdiSetRectRgn(shm_buffer->damage_region, 0, 0, 0, 0);
