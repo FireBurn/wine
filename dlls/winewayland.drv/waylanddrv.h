@@ -304,6 +304,8 @@ struct wayland_surface
     struct wp_alpha_modifier_surface_v1 *wp_alpha_modifier_surface_v1;
 
     struct wayland_surface_config pending, requested, processing, current;
+    /* The state of the last configure handled, to tell when the compositor unmaximizes the window. */
+    enum wayland_surface_config_state last_configure_state;
     BOOL resizing;
     struct wayland_window_config window;
     int content_width, content_height;

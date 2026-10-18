@@ -482,6 +482,7 @@ static void wayland_configure_window(HWND hwnd)
     BOOL needs_enter_size_move = FALSE;
     BOOL needs_exit_size_move = FALSE;
     BOOL restoring_from_minimize = FALSE;
+    BOOL was_maximized;
     struct wayland_win_data *data;
     RECT rect, surface_rect;
 
@@ -572,6 +573,23 @@ static void wayland_configure_window(HWND hwnd)
         memset(&surface->processing, 0, sizeof(surface->processing));
         xdg_surface_ack_configure(surface->xdg_surface,
                                   surface->current.serial);
+        wayland_win_data_release(data);
+        send_message(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+        return;
+    }
+
+    /* The compositor unmaximized the window. Windows keeps the rectangle the window had before
+     * it was maximized, let it restore that instead of keeping the maximized size. */
+    style = NtUserGetWindowLongW(hwnd, GWL_STYLE);
+    was_maximized = surface->last_configure_state & WAYLAND_SURFACE_CONFIG_STATE_MAXIMIZED;
+    surface->last_configure_state = state;
+    if ((style & WS_MAXIMIZE) && was_maximized &&
+        !(state & (WAYLAND_SURFACE_CONFIG_STATE_MAXIMIZED | WAYLAND_SURFACE_CONFIG_STATE_FULLSCREEN)))
+    {
+        TRACE("hwnd=%p restoring from maximize\n", hwnd);
+        surface->current = surface->processing;
+        memset(&surface->processing, 0, sizeof(surface->processing));
+        xdg_surface_ack_configure(surface->xdg_surface, surface->current.serial);
         wayland_win_data_release(data);
         send_message(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
         return;
